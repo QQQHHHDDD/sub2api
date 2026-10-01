@@ -64,6 +64,38 @@ jobs:
       - name: Frontend typecheck and critical vitest
         run: make test-frontend
 
+  windows-quick-config:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        system-directory: [System32, SysWOW64]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Execute quick configuration with Windows PowerShell 5.1 and CMD
+        working-directory: frontend
+        shell: powershell
+        env:
+          TEST_SYSTEM_DIRECTORY: ${{ matrix.system-directory }}
+        run: |
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'Windows PowerShell 5.1 is required' }
+          $env:SUB2API_TEST_POWERSHELL = "$env:SystemRoot\$env:TEST_SYSTEM_DIRECTORY\WindowsPowerShell\v1.0\powershell.exe"
+          $env:SUB2API_TEST_CMD = "$env:SystemRoot\$env:TEST_SYSTEM_DIRECTORY\cmd.exe"
+          pnpm exec vitest run src/utils/__tests__/codexQuickConfig.spec.ts src/components/keys/__tests__/CodexQuickConfigModal.spec.ts
+          exit $LASTEXITCODE
+
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
