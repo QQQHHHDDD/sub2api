@@ -61,10 +61,10 @@ func (mockCountry) Country(_ context.Context, ip string) string {
 	return ""
 }
 
-type europeCountry struct{}
+type fixedLocation struct{ value Location }
 
-func (europeCountry) Country(context.Context, string) string   { return "DE" }
-func (europeCountry) Continent(context.Context, string) string { return "EU" }
+func (f fixedLocation) Country(context.Context, string) string    { return f.value.Country }
+func (f fixedLocation) Location(context.Context, string) Location { return f.value }
 func managerFor(t *testing.T, id string, cache *redis.Client, store *memoryStore) *Manager {
 	t.Helper()
 	r := Runtime{Secret: strings.Repeat("k", 32), Gateway: id != "", ID: id, Endpoint: "http://127.0.0.1", Region: "US"}
@@ -140,19 +140,60 @@ func TestServerlessRegionRoutesAuthenticatedPayloadAndPinsKey(t *testing.T) {
 	require.Equal(t, "1", stats["us-pod|US|region|requests"])
 }
 
-func TestServerlessContinentRoutesWhenCountryRuleIsAbsent(t *testing.T) {
+func TestServerlessContinentRoutingAndFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		location Location
+		want     string
+	}{
+		{"Europe", Location{Country: "DE", Continent: "EU"}, "pod"},
+		{"Africa", Location{Country: "ZA", Continent: "AF"}, "pod"},
+		{"North America", Location{Country: "US", Continent: "NA"}, "pod"},
+		{"South America", Location{Country: "BR", Continent: "SA"}, "pod"},
+		{"Oceania", Location{Country: "AU", Continent: "OC"}, "pod"},
+		{"Antarctica", Location{Country: "AQ", Continent: "AN"}, "pod"},
+		{"Asia", Location{Country: "CN", Continent: "AS"}, "primary"},
+		{"unknown", Location{}, "primary"},
+		{"country without continent", Location{Country: "US"}, "primary"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cache := cacheFor(t)
+			store := &memoryStore{}
+			_, srv := registeredNode(t, cache, store, func(c *gin.Context) { c.String(200, "pod") })
+			store.config = routeConfig(srv.URL)
+			store.config.Regions = nil
+			for _, continent := range []string{"AF", "AN", "EU", "NA", "OC", "SA"} {
+				store.config.Regions = append(store.config.Regions, Region{Continent: continent, PodIDs: []string{"us-pod"}})
+			}
+			m := managerFor(t, "", cache, store)
+			m.geo = fixedLocation{tc.location}
+			w := request(t, ingressRouter(m, 43, "203.0.113.5"), "/v1/responses")
+			require.Equal(t, 200, w.Code)
+			require.Equal(t, tc.want, w.Body.String())
+		})
+	}
+}
+
+func TestServerlessCountryRuleWinsOverContinentEvenWhenPodUnavailable(t *testing.T) {
 	cache := cacheFor(t)
 	store := &memoryStore{}
 	_, srv := registeredNode(t, cache, store, func(c *gin.Context) { c.String(200, "continent-pod") })
-	store.config = Config{Enabled: true, Established: true,
-		Pods:    []PodPolicy{{ID: "us-pod", Endpoint: srv.URL, Enabled: true}},
-		Regions: []Region{{Continent: "EU", PodIDs: []string{"us-pod"}}}}
+	store.config = routeConfig(srv.URL)
+	store.config.Pods = append(store.config.Pods, PodPolicy{ID: "country-pod", Endpoint: "http://127.0.0.1:1", Enabled: true})
+	store.config.Regions = []Region{
+		{Continent: "EU", PodIDs: []string{"us-pod"}},
+		{Country: "DE", PodIDs: []string{"country-pod"}},
+	}
 	m := managerFor(t, "", cache, store)
-	m.geo = europeCountry{}
-	w := request(t, ingressRouter(m, 43, "203.0.113.5"), "/v1/responses")
+	m.geo = fixedLocation{Location{Country: "DE", Continent: "EU"}}
+	w := request(t, ingressRouter(m, 44, "203.0.113.6"), "/v1/responses")
 	require.Equal(t, 200, w.Code)
-	require.Equal(t, "continent-pod", w.Body.String())
+	require.Equal(t, "primary", w.Body.String())
+	stats, err := m.Stats(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "1", stats["primary|DE|unhealthy_fallback|requests"])
 }
+
 func TestServerlessUnavailableNewBindingFallsBackButExistingNeverMoves(t *testing.T) {
 	cache := cacheFor(t)
 	store := &memoryStore{}

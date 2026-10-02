@@ -41,10 +41,22 @@
         <div class="flex items-center justify-between"><h3 class="font-medium">{{ text('地区 → Pod 池', 'Region → Pod pool') }}</h3>
           <button type="button" class="btn btn-secondary btn-sm" :disabled="busy || !loaded" @click="addRegion">{{ text('添加地区', 'Add region') }}</button>
         </div>
+        <p class="text-xs text-gray-500">{{ text('国家规则优先于洲规则；未命中规则或地区未知时走主站。洲归属使用 GeoJS 返回值。', 'Country rules take precedence over continent rules. Unmatched or unknown locations use the primary. Continent classification comes from GeoJS.') }}</p>
         <div v-for="(region, index) in draft.regions" :key="index" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-700">
           <div class="flex flex-wrap items-center gap-3">
-            <label class="text-sm">{{ text('匹配范围', 'Match scope') }}<select v-model="region.continent" class="input ml-2 w-36" :disabled="busy" @change="region.country = ''"><option value="">{{ text('国家', 'Country') }}</option><option value="AF">{{ text('非洲', 'Africa') }}</option><option value="AN">{{ text('南极洲', 'Antarctica') }}</option><option value="AS">{{ text('亚洲', 'Asia') }}</option><option value="EU">{{ text('欧洲', 'Europe') }}</option><option value="NA">{{ text('北美洲', 'North America') }}</option><option value="OC">{{ text('大洋洲', 'Oceania') }}</option><option value="SA">{{ text('南美洲', 'South America') }}</option></select></label>
-            <label class="text-sm">{{ text('国家代码', 'Country code') }}<input v-model="region.country" maxlength="2" class="input ml-2 w-24" placeholder="US" :disabled="busy || !!region.continent" /></label>
+            <label class="text-sm">{{ text('匹配范围', 'Match scope') }}
+              <select :value="region.continent || ''" class="input ml-2 w-36" :disabled="busy" data-testid="serverless-region-scope" @change="changeScope(region, $event)">
+                <option value="">{{ text('国家', 'Country') }}</option>
+                <option value="AF">{{ text('非洲', 'Africa') }}</option>
+                <option value="AN">{{ text('南极洲', 'Antarctica') }}</option>
+                <option value="AS">{{ text('亚洲', 'Asia') }}</option>
+                <option value="EU">{{ text('欧洲', 'Europe') }}</option>
+                <option value="NA">{{ text('北美洲', 'North America') }}</option>
+                <option value="OC">{{ text('大洋洲', 'Oceania') }}</option>
+                <option value="SA">{{ text('南美洲', 'South America') }}</option>
+              </select>
+            </label>
+            <label v-if="!region.continent" class="text-sm">{{ text('国家代码', 'Country code') }}<input v-model="region.country" maxlength="2" class="input ml-2 w-24" placeholder="US" :disabled="busy" /></label>
             <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="draft.regions.splice(index, 1)">{{ text('删除地区', 'Remove region') }}</button>
           </div>
           <div class="flex flex-wrap gap-4">
@@ -80,7 +92,7 @@ import { useI18n } from 'vue-i18n'
 import { apiClient } from '@/api/client'
 
 interface Policy { id: string; endpoint: string; enabled: boolean }
-interface Region { country: string; continent?: string; pod_ids: string[] }
+interface Region { country?: string; continent?: string; pod_ids: string[] }
 interface Config { enabled: boolean; pods: Policy[]; regions: Region[] }
 interface Pod { id: string; boot: string; endpoint: string; region: string; version: string; ready: boolean; at: number }
 interface Snapshot { config: Config; pods: Pod[]; stats: Record<string, string> }
@@ -134,7 +146,7 @@ async function save() {
     config.regions.forEach(r => {
       r.country = (r.country || '').trim().toUpperCase()
       r.continent = (r.continent || '').trim().toUpperCase()
-      if (r.continent) r.country = ''
+      if (r.continent) delete r.country
       else delete r.continent
     })
     const { data } = await apiClient.put<Config>('/admin/serverless', config)
@@ -152,6 +164,10 @@ function removePod(id: string) {
   if (!window.confirm(text('移除会让已有绑定无法继续请求。确认该 Pod 已排空？', 'Removing the policy breaks existing bindings. Confirm that this Pod is drained?'))) return
   draft.value.pods = draft.value.pods.filter(p => p.id !== id)
   draft.value.regions.forEach(r => { r.pod_ids = r.pod_ids.filter(p => p !== id) })
+}
+function changeScope(region: Region, event: Event) {
+  region.continent = (event.target as HTMLSelectElement).value
+  region.country = ''
 }
 function addRegion() { draft.value.regions.push({ country: '', continent: '', pod_ids: [] }) }
 async function probe(id: string) {

@@ -144,10 +144,12 @@ func (m *Manager) Route(c *gin.Context, keyID int64, clientIP string) {
 			c.Next()
 			return
 		}
-		country = m.geo.Country(ctx, clientIP)
 		continent := ""
 		if resolver, ok := m.geo.(LocationResolver); ok {
-			continent = resolver.Continent(ctx, clientIP)
+			location := resolver.Location(ctx, clientIP)
+			country, continent = location.Country, location.Continent
+		} else {
+			country = m.geo.Country(ctx, clientIP)
 		}
 		b = Binding{ID: "primary"}
 		reason = "default"
@@ -156,13 +158,13 @@ func (m *Manager) Route(c *gin.Context, keyID int64, clientIP string) {
 		// broad defaults such as "all of Europe" while carving out a country.
 		countryMatched := false
 		for _, r := range cfg.Regions {
-			if r.Country == country {
+			if country != "" && r.Country == country {
 				countryMatched = true
 				break
 			}
 		}
 		for _, r := range cfg.Regions {
-			if (countryMatched && r.Country == country) || (!countryMatched && r.Country == "" && r.Continent == continent) {
+			if (countryMatched && r.Country == country) || (!countryMatched && country != "" && continent != "" && r.Continent == continent) {
 				for _, id := range r.PodIDs {
 					ids[id] = true
 				}

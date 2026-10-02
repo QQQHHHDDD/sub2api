@@ -24,9 +24,13 @@ const geoJSURL = "https://get.geojs.io/v1/ip/geo/"
 type CountryResolver interface {
 	Country(context.Context, string) string
 }
+type Location struct {
+	Country   string `json:"country"`
+	Continent string `json:"continent"`
+}
+
 type LocationResolver interface {
-	CountryResolver
-	Continent(context.Context, string) string
+	Location(context.Context, string) Location
 }
 type GeoJSResolver struct {
 	cache  *redis.Client
@@ -40,40 +44,29 @@ func NewGeoJSResolver(cache *redis.Client) *GeoJSResolver {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, slots: make(chan struct{}, 8)}
 }
 func (g *GeoJSResolver) Country(ctx context.Context, raw string) string {
-	country, _ := g.location(ctx, raw)
-	return country
-}
-func (g *GeoJSResolver) Continent(ctx context.Context, raw string) string {
-	_, continent := g.location(ctx, raw)
-	return continent
+	return g.Location(ctx, raw).Country
 }
 
-func (g *GeoJSResolver) location(ctx context.Context, raw string) (string, string) {
+func (g *GeoJSResolver) Location(ctx context.Context, raw string) Location {
 	ip, err := netip.ParseAddr(raw)
 	if err != nil {
-		return "", ""
+		return Location{}
 	}
 	ip = ip.Unmap()
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
-		return "", ""
+		return Location{}
 	}
 	normalized := ip.String()
 	hash := sha256.Sum256([]byte(normalized))
-	key := prefix + "geojs:" + hex.EncodeToString(hash[:])
-	locationKey := prefix + "geojs-location:" + hex.EncodeToString(hash[:])
+	// Keep the country-only cache untouched for older ingress instances. A
+	// separate key ensures an old cached country cannot hide its continent.
+	key := prefix + "geojs-location:" + hex.EncodeToString(hash[:])
 	if g.cache != nil {
-		if value, err := g.cache.Get(ctx, locationKey).Result(); err == nil {
-			parts := strings.SplitN(value, "|", 2)
-			if len(parts) == 2 {
-				country, continent := strings.ToUpper(parts[0]), strings.ToUpper(parts[1])
-				if (country == "" || countryCode.MatchString(country)) && (continent == "" || continentCode.MatchString(continent)) {
-					return country, continent
-				}
+		if value, err := g.cache.Get(ctx, key).Result(); err == nil {
+			var location Location
+			if json.Unmarshal([]byte(value), &location) == nil && validLocation(location) {
+				return location
 			}
-		}
-		// Keep compatibility with the original country-only cache entries.
-		if value, err := g.cache.Get(ctx, key).Result(); err == nil && countryCode.MatchString(value) {
-			return value, ""
 		}
 	}
 	// Bound unique misses; same-IP lookups share a single provider call.
@@ -82,11 +75,11 @@ func (g *GeoJSResolver) location(ctx context.Context, raw string) (string, strin
 		case g.slots <- struct{}{}:
 			defer func() { <-g.slots }()
 		default:
-			return "", nil
+			return Location{}, nil
 		}
 		lookupCtx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 		defer cancel()
-		country, continent := "", ""
+		location := Location{}
 		request, err := http.NewRequestWithContext(lookupCtx, http.MethodGet, geoJSURL+url.PathEscape(normalized)+".json", nil)
 		if err == nil {
 			res, e := g.client.Do(request)
@@ -101,9 +94,9 @@ func (g *GeoJSResolver) location(ctx context.Context, raw string) (string, strin
 				if res.StatusCode == 200 && readErr == nil && len(body) <= 65536 && json.Unmarshal(body, &result) == nil {
 					resolved, e := netip.ParseAddr(result.IP)
 					if e == nil && resolved.Unmap() == ip && countryCode.MatchString(strings.ToUpper(result.Country)) {
-						country = strings.ToUpper(result.Country)
+						location.Country = strings.ToUpper(result.Country)
 						if continentCode.MatchString(strings.ToUpper(result.Continent)) {
-							continent = strings.ToUpper(result.Continent)
+							location.Continent = strings.ToUpper(result.Continent)
 						}
 					}
 				}
@@ -111,28 +104,30 @@ func (g *GeoJSResolver) location(ctx context.Context, raw string) (string, strin
 		}
 		if g.cache != nil {
 			ttl := 24 * time.Hour
-			value := country + "|" + continent
-			if country == "" {
+			if location.Country == "" || location.Continent == "" {
 				ttl = time.Minute
-				value = "|"
 			}
+			value, _ := json.Marshal(location)
 			cacheCtx, cacheCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			defer cacheCancel()
 			_ = g.cache.Set(cacheCtx, key, value, ttl).Err()
-			_ = g.cache.Set(cacheCtx, locationKey, value, ttl).Err()
 		}
-		return country + "\x00" + continent, nil
+		return location, nil
 	})
 	select {
 	case <-ctx.Done():
-		return "", ""
+		return Location{}
 	case result := <-channel:
-		if value, ok := result.Val.(string); ok {
-			parts := strings.SplitN(value, "\x00", 2)
-			if len(parts) == 2 {
-				return parts[0], parts[1]
-			}
+		if location, ok := result.Val.(Location); ok {
+			return location
 		}
-		return "", ""
+		return Location{}
 	}
+}
+
+func validLocation(location Location) bool {
+	if location.Country == "" {
+		return location.Continent == ""
+	}
+	return countryCode.MatchString(location.Country) && (location.Continent == "" || continentCode.MatchString(location.Continent))
 }
