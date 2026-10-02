@@ -43,7 +43,8 @@
         </div>
         <div v-for="(region, index) in draft.regions" :key="index" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-700">
           <div class="flex flex-wrap items-center gap-3">
-            <label class="text-sm">{{ text('国家代码', 'Country code') }}<input v-model="region.country" maxlength="2" class="input ml-2 w-24" placeholder="US" :disabled="busy" /></label>
+            <label class="text-sm">{{ text('匹配范围', 'Match scope') }}<select v-model="region.continent" class="input ml-2 w-36" :disabled="busy" @change="region.country = ''"><option value="">{{ text('国家', 'Country') }}</option><option value="AF">{{ text('非洲', 'Africa') }}</option><option value="AN">{{ text('南极洲', 'Antarctica') }}</option><option value="AS">{{ text('亚洲', 'Asia') }}</option><option value="EU">{{ text('欧洲', 'Europe') }}</option><option value="NA">{{ text('北美洲', 'North America') }}</option><option value="OC">{{ text('大洋洲', 'Oceania') }}</option><option value="SA">{{ text('南美洲', 'South America') }}</option></select></label>
+            <label class="text-sm">{{ text('国家代码', 'Country code') }}<input v-model="region.country" maxlength="2" class="input ml-2 w-24" placeholder="US" :disabled="busy || !!region.continent" /></label>
             <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="draft.regions.splice(index, 1)">{{ text('删除地区', 'Remove region') }}</button>
           </div>
           <div class="flex flex-wrap gap-4">
@@ -79,7 +80,7 @@ import { useI18n } from 'vue-i18n'
 import { apiClient } from '@/api/client'
 
 interface Policy { id: string; endpoint: string; enabled: boolean }
-interface Region { country: string; pod_ids: string[] }
+interface Region { country: string; continent?: string; pod_ids: string[] }
 interface Config { enabled: boolean; pods: Policy[]; regions: Region[] }
 interface Pod { id: string; boot: string; endpoint: string; region: string; version: string; ready: boolean; at: number }
 interface Snapshot { config: Config; pods: Pod[]; stats: Record<string, string> }
@@ -130,7 +131,12 @@ function onToggle(event: Event) { if ((event.target as HTMLDetailsElement).open 
 async function save() {
   await action(async () => {
     const config: Config = JSON.parse(JSON.stringify(draft.value))
-    config.regions.forEach(r => { r.country = r.country.trim().toUpperCase() })
+    config.regions.forEach(r => {
+      r.country = (r.country || '').trim().toUpperCase()
+      r.continent = (r.continent || '').trim().toUpperCase()
+      if (r.continent) r.country = ''
+      else delete r.continent
+    })
     const { data } = await apiClient.put<Config>('/admin/serverless', config)
     if (!disposed) { draft.value = data; notice.value = text('已保存。新规则在数秒内生效，已有绑定保持不变。', 'Saved. New rules take effect within seconds; existing bindings remain.') }
   })
@@ -147,7 +153,7 @@ function removePod(id: string) {
   draft.value.pods = draft.value.pods.filter(p => p.id !== id)
   draft.value.regions.forEach(r => { r.pod_ids = r.pod_ids.filter(p => p !== id) })
 }
-function addRegion() { draft.value.regions.push({ country: '', pod_ids: [] }) }
+function addRegion() { draft.value.regions.push({ country: '', continent: '', pod_ids: [] }) }
 async function probe(id: string) {
   await action(async () => {
     const { data } = await apiClient.post<{ ready: boolean }>('/admin/serverless/pods/' + encodeURIComponent(id) + '/probe')

@@ -67,6 +67,18 @@ describe('Gateway Serverless settings', () => {
     expect(wrapper.find('textarea').exists()).toBe(false)
     wrapper.unmount()
   })
+  it('saves a continent-to-Pod rule', async () => {
+    const wrapper = await opened()
+    await button(wrapper, '确认此地址').trigger('click')
+    await button(wrapper, '添加地区').trigger('click')
+    await wrapper.findAll('select').at(-1)?.setValue('EU')
+    await wrapper.get('input[value="us-one"]').setValue(true)
+    await button(wrapper, '保存 Serverless 配置').trigger('click')
+    await flushPromises()
+    const payload = vi.mocked(apiClient.put).mock.calls[0]?.[1]
+    expect(payload.regions).toEqual([{ continent: 'EU', country: '', pod_ids: ['us-one'] }])
+    wrapper.unmount()
+  })
   it('keeps the draft on save failure and shows an actionable error', async () => {
     const wrapper = await opened()
     await wrapper.get('[data-testid="serverless-enabled"]').setValue(true)

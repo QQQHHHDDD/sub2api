@@ -14,6 +14,7 @@ const SettingKey = "serverless_routing_v1"
 
 var identifier = regexp.MustCompile("^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$")
 var countryCode = regexp.MustCompile("^[A-Z]{2}$")
+var continentCode = regexp.MustCompile("^(AF|AN|AS|EU|NA|OC|SA)$")
 
 type PodPolicy struct {
 	ID       string `json:"id"`
@@ -21,8 +22,9 @@ type PodPolicy struct {
 	Enabled  bool   `json:"enabled"`
 }
 type Region struct {
-	Country string   `json:"country"`
-	PodIDs  []string `json:"pod_ids"`
+	Country   string   `json:"country,omitempty"`
+	Continent string   `json:"continent,omitempty"`
+	PodIDs    []string `json:"pod_ids"`
 }
 type Config struct {
 	Established bool        `json:"established"`
@@ -74,11 +76,22 @@ func Validate(c Config) error {
 		}
 	}
 	codes := map[string]bool{}
+	continents := map[string]bool{}
 	for _, r := range c.Regions {
-		if !countryCode.MatchString(r.Country) || codes[r.Country] {
-			return errors.New("region codes must be unique two-letter uppercase country codes")
+		if (r.Country == "") == (r.Continent == "") {
+			return errors.New("each region requires exactly one country or continent code")
 		}
-		codes[r.Country] = true
+		if r.Country != "" {
+			if !countryCode.MatchString(r.Country) || codes[r.Country] {
+				return errors.New("region country codes must be unique two-letter uppercase country codes")
+			}
+			codes[r.Country] = true
+		} else {
+			if !continentCode.MatchString(r.Continent) || continents[r.Continent] {
+				return errors.New("region continent codes must be unique: AF, AN, AS, EU, NA, OC or SA")
+			}
+			continents[r.Continent] = true
+		}
 		if len(r.PodIDs) == 0 {
 			return errors.New("each region requires at least one approved Pod")
 		}

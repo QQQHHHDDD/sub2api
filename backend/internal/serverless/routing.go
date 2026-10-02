@@ -145,11 +145,24 @@ func (m *Manager) Route(c *gin.Context, keyID int64, clientIP string) {
 			return
 		}
 		country = m.geo.Country(ctx, clientIP)
+		continent := ""
+		if resolver, ok := m.geo.(LocationResolver); ok {
+			continent = resolver.Continent(ctx, clientIP)
+		}
 		b = Binding{ID: "primary"}
 		reason = "default"
 		ids := map[string]bool{}
+		// A country rule wins over a continent rule. This lets operators keep
+		// broad defaults such as "all of Europe" while carving out a country.
+		countryMatched := false
 		for _, r := range cfg.Regions {
 			if r.Country == country {
+				countryMatched = true
+				break
+			}
+		}
+		for _, r := range cfg.Regions {
+			if (countryMatched && r.Country == country) || (!countryMatched && r.Country == "" && r.Continent == continent) {
 				for _, id := range r.PodIDs {
 					ids[id] = true
 				}

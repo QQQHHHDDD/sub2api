@@ -60,6 +60,11 @@ func (mockCountry) Country(_ context.Context, ip string) string {
 	}
 	return ""
 }
+
+type europeCountry struct{}
+
+func (europeCountry) Country(context.Context, string) string   { return "DE" }
+func (europeCountry) Continent(context.Context, string) string { return "EU" }
 func managerFor(t *testing.T, id string, cache *redis.Client, store *memoryStore) *Manager {
 	t.Helper()
 	r := Runtime{Secret: strings.Repeat("k", 32), Gateway: id != "", ID: id, Endpoint: "http://127.0.0.1", Region: "US"}
@@ -133,6 +138,20 @@ func TestServerlessRegionRoutesAuthenticatedPayloadAndPinsKey(t *testing.T) {
 	stats, err := m.Stats(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "1", stats["us-pod|US|region|requests"])
+}
+
+func TestServerlessContinentRoutesWhenCountryRuleIsAbsent(t *testing.T) {
+	cache := cacheFor(t)
+	store := &memoryStore{}
+	_, srv := registeredNode(t, cache, store, func(c *gin.Context) { c.String(200, "continent-pod") })
+	store.config = Config{Enabled: true, Established: true,
+		Pods:    []PodPolicy{{ID: "us-pod", Endpoint: srv.URL, Enabled: true}},
+		Regions: []Region{{Continent: "EU", PodIDs: []string{"us-pod"}}}}
+	m := managerFor(t, "", cache, store)
+	m.geo = europeCountry{}
+	w := request(t, ingressRouter(m, 43, "203.0.113.5"), "/v1/responses")
+	require.Equal(t, 200, w.Code)
+	require.Equal(t, "continent-pod", w.Body.String())
 }
 func TestServerlessUnavailableNewBindingFallsBackButExistingNeverMoves(t *testing.T) {
 	cache := cacheFor(t)
@@ -291,6 +310,12 @@ func TestServerlessCountryAndEndpointValidation(t *testing.T) {
 		require.Error(t, ValidateEndpoint(origin))
 	}
 	c.Regions[0].Country = "USA"
+	require.Error(t, Validate(c))
+	c.Regions[0] = Region{Continent: "EU", PodIDs: []string{"us-pod"}}
+	require.NoError(t, Validate(c))
+	c.Regions[0].Continent = "Europe"
+	require.Error(t, Validate(c))
+	c.Regions[0] = Region{Country: "US", Continent: "NA", PodIDs: []string{"us-pod"}}
 	require.Error(t, Validate(c))
 	require.False(t, routePath(testRequest("POST", "/v1/images/generations", nil)))
 	require.False(t, routePath(testRequest("GET", "/api/v1/admin/settings", nil)))

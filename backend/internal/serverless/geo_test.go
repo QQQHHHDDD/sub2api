@@ -21,9 +21,10 @@ func TestServerlessGeoJSUsesExistingProviderAndSharedCache(t *testing.T) {
 	g.client.Transport = geoTransport(func(r *http.Request) (*http.Response, error) {
 		calls.Add(1)
 		require.Equal(t, "https://get.geojs.io/v1/ip/geo/8.8.8.8.json", r.URL.String())
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ip":"8.8.8.8","country_code":"US"}`))}, nil
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ip":"8.8.8.8","country_code":"US","continent_code":"NA"}`))}, nil
 	})
 	require.Equal(t, "US", g.Country(context.Background(), "8.8.8.8"))
+	require.Equal(t, "NA", g.Continent(context.Background(), "8.8.8.8"))
 	other := NewGeoJSResolver(cache)
 	other.client = g.client
 	require.Equal(t, "US", other.Country(context.Background(), "8.8.8.8"))

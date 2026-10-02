@@ -10,7 +10,7 @@ gateway 额外配置 RUNTIME_ROLE=gateway、RUNTIME_SERVERLESS_ID=nerd-us-1、RU
 
 endpoint 必须由主站可达，并固定到指定实例，不能指向随机负载均衡的 Service。跨集群 Pod/ClusterIP 通常不可达，应使用专属 HTTPS 入口或受信隧道；HTTP 只接受私网/loopback IP。反向代理须同时转发 /internal/serverless/probe、模型路由及 /api/bps-images/，不能把专属入口又送回主站。
 
-在面板确认上报地址、保存、检查连接后，启用接收新绑定并创建地区规则。例如 US → nerd-us-1。一个地区可关联多个 Pod，使用 API Key 标识的稳定散列排序选择健康实例。心跳和入口签名健康探测都通过才接收新绑定。
+在面板确认上报地址、保存、检查连接后，启用接收新绑定并创建地区规则。例如 US → nerd-us-1。规则支持国家代码或洲代码（`AF` 非洲、`AN` 南极洲、`AS` 亚洲、`EU` 欧洲、`NA` 北美洲、`OC` 大洋洲、`SA` 南美洲）；国家规则优先于洲规则，同一洲可关联多个 Pod。使用 API Key 标识的稳定散列排序选择健康实例。心跳和入口签名健康探测都通过才接收新绑定。
 
 ## 地区识别
 
