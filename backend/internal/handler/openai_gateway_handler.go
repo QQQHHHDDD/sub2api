@@ -3216,6 +3216,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		var turnQueuePermissions service.APIKeyQueueRequestPermissions
 		var permissionsPreflightTurn int
 		// Passthrough ingress does not invoke BeforeTurn for the first frame.
+		// Recheck after account selection/credential lookup as the key may have
+		// been revoked since the first admission (also on a failover attempt).
+		if err := h.concurrencyHelper.RevalidateTurnAuth(ctx); err != nil {
+			closeOpenAIWSAdmissionError(wsConn, reqLog, "openai.websocket_key_auth_rejected", err)
+			return
+		}
 		if err := checkSimpleModeTurnBilling(); err != nil {
 			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
 			return
@@ -3401,6 +3407,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				currentUserRelease = userReleaseFunc
 				currentAccountRelease = accountReleaseFunc
+				// Admission may wait: authorize again after the slots are held,
+				// before sending this turn upstream. Existing cleanup owns them.
+				if err := h.concurrencyHelper.RevalidateTurnAuth(turnQueueCtx); err != nil {
+					return mapOpenAIWSTurnAdmissionError(err)
+				}
 				return checkSimpleModeTurnBilling()
 			},
 			AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
