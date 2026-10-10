@@ -334,7 +334,7 @@ func (s *AccountOpsService) reconcileAccountOpsGroups(ctx context.Context, c *Ac
 		if assignment.ID == "" {
 			continue
 		}
-		groupIndex := -1
+		var groupIndex int
 		if index, ok := legacyTargets[assignment.ID]; ok {
 			groupIndex = index
 		} else if index, ok := discoveredTargets[assignment.ID]; ok {

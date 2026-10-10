@@ -210,10 +210,6 @@ func canonicalAccountOpsSite(raw string) string {
 	return strings.TrimRight(site, "/")
 }
 
-func (a AccountOpsGroupAssignment) view() AccountOpsGroupView {
-	return AccountOpsGroupView{ID: a.ID, Name: a.Name, DefaultName: a.DefaultName, Provider: a.Provider, Site: a.Site, Mode: a.Mode}
-}
-
 func (a AccountOpsGroupAssignment) String() string {
 	return fmt.Sprintf("%s:%s", a.Provider, a.ID)
 }
