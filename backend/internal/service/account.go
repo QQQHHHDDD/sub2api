@@ -932,6 +932,10 @@ func resolveRequestedModelInMapping(mapping map[string]string, requestedModel st
 // （isDeepseekServableModel）——未知模型名透传上游只会得到 404/400，并误触发
 // per-(账号,模型) 30 分钟冷却；带 [1m] 上下文后缀的写法先归一化再比对。
 func (a *Account) IsModelSupported(requestedModel string) bool {
+	// Apply the credential boundary before passthrough's model allowlist bypass.
+	if a.IsExcelOAuth() && !a.IsExcelBPSEnabledForModel(requestedModel) {
+		return false
+	}
 	if blocked, _ := a.Extra["astra_model_disabled"].(bool); blocked {
 		if empty, _ := a.Extra["astra_model_empty_mapping"].(bool); empty {
 			return false
