@@ -872,6 +872,15 @@ func (s *AccountTestService) testBedrockAccountConnection(c *gin.Context, ctx co
 func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account *Account, modelID string, prompt string, mode string) error {
 	ctx := c.Request.Context()
 	mode = normalizeAccountTestMode(mode)
+	if account.IsExcelOAuth() {
+		model := strings.TrimSpace(modelID)
+		if model == "" {
+			model = openai.DefaultTestModel
+		}
+		if s.openaiGatewayService == nil || s.openaiGatewayService.validateExcelOAuthRoute(ctx, account, model) != nil {
+			return s.sendErrorAndEnd(c, errExcelOAuthRouteUnavailable.Error())
+		}
+	}
 
 	// Excel/BPS accounts must use the same gateway path as user Responses
 	// requests. The legacy account-test probe hard-codes ChatGPT Codex and
@@ -925,6 +934,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		credentialAccount = resolved
 	}
 
+	if credentialAccount.IsExcelOAuth() {
+		return s.sendErrorAndEnd(c, errExcelOAuthRouteUnavailable.Error())
+	}
 	// Determine authentication method and API URL
 	var authToken string
 	var apiURL string
@@ -2409,6 +2421,9 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		credentialAccount = resolved
 	}
 
+	if credentialAccount.IsExcelOAuth() {
+		return s.sendErrorAndEnd(c, errExcelOAuthRouteUnavailable.Error())
+	}
 	authToken := ""
 	apiURL := ""
 	isOAuth := false
@@ -3397,6 +3412,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 		if handled, err := s.testExcelBPSImages(c, ctx, account, parsed, upstreamModel); handled {
 			return err
 		}
+	}
+	if credentialAccount.IsExcelOAuth() {
+		return s.sendErrorAndEnd(c, errExcelOAuthRouteUnavailable.Error())
 	}
 	responsesBody, targetURL, err := buildOpenAIImagesOAuthPayload(parsed, upstreamModel)
 	if err != nil {
