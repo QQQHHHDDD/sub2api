@@ -2963,6 +2963,10 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 				response.Success(c, models)
 				return
 			} else if account.IsExcelBPSEnabled() {
+				if service.IsExcelAuthorizationError(fetchErr) {
+					response.ErrorFrom(c, fetchErr)
+					return
+				}
 				response.Error(c, http.StatusBadGateway, "Excel BPS model discovery is unavailable")
 				return
 			}

@@ -2184,8 +2184,11 @@ func (a *Account) IsExcelBPSEnabled() bool {
 		return false
 	}
 	enabled, _ := a.Extra["openai_excel_bps"].(bool)
-	return enabled
+	return enabled && a.Extra[ExcelBPSAuthorizationPendingKey] != true
 }
+
+// The requested switch stays on while the worker prepares the independent grant.
+const ExcelBPSAuthorizationPendingKey = "openai_excel_bps_authorization_pending"
 
 const ExcelBPSIgnoreEncryptedContentKey = "openai_excel_bps_ignore_encrypted_content"
 
