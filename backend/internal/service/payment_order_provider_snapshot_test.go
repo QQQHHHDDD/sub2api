@@ -40,6 +40,7 @@ func TestCreateOrderInTxPersistsSubscriptionRenewalMode(t *testing.T) {
 		128,
 		0,
 		128,
+		0,
 		nil,
 	)
 	require.NoError(t, err)
