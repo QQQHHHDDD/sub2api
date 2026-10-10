@@ -358,6 +358,13 @@ func (s *OpenAIGatewayService) forwardExcelBPS(ctx context.Context, c *gin.Conte
 	var catalog *basispoints.CatalogCache
 	if identity != "" {
 		replay, catalog = &excelBPSReplay, &excelBPSCatalog
+		if s.cfg != nil && s.cfg.Gateway.ExcelBPSStateRedisEnabled && !transient {
+			store, ok := s.cache.(basispoints.StateStore)
+			if !ok {
+				return fail(503, "basispoints_state_unavailable", basispoints.ErrStateUnavailable.Error())
+			}
+			replay, catalog = basispoints.NewPersistentCaches(ctx, store)
+		}
 	}
 	var upstreamBody []byte
 	var bridge *basispoints.Bridge
@@ -367,6 +374,9 @@ func (s *OpenAIGatewayService) forwardExcelBPS(ctx context.Context, c *gin.Conte
 		upstreamBody, bridge, err = basispoints.PrepareWithCatalog(body, scope, replay, catalog)
 	}
 	if err != nil {
+		if errors.Is(err, basispoints.ErrStateUnavailable) {
+			return fail(503, "basispoints_state_unavailable", basispoints.ErrStateUnavailable.Error())
+		}
 		var contentErr *basispoints.ContentValidationError
 		if errors.As(err, &contentErr) {
 			return fail(400, "basispoints_request_invalid", err.Error(), contentErr.Path)
