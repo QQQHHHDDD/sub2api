@@ -967,6 +967,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	} else {
 		result.OpenAICodexVersionAutoSyncEnabled = true
 	}
+	result.OpenAIRequestTimezoneEnabled = settings[SettingKeyOpenAIRequestTimezoneEnabled] == "true"
 	if v, ok := settings[SettingKeyOpenAICodexTicketEnabled]; ok && v != "" {
 		result.OpenAICodexTicketEnabled = v == "true"
 	} else if s != nil && s.cfg != nil {

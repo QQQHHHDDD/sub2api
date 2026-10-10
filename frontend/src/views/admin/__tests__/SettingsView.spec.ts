@@ -1118,6 +1118,18 @@ describe("admin SettingsView payment visible method controls", () => {
     wrapper.unmount();
   });
 
+  it.each([false, true])("loads and toggles request timezone binding from %s", async (enabled) => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, openai_request_timezone_enabled: enabled });
+    const wrapper = mountView();
+    await flushPromises();
+    const toggle = wrapper.get<HTMLInputElement>("#request-timezone-enabled");
+    expect(toggle.element.checked).toBe(enabled);
+    await toggle.setValue(!enabled);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[0]?.[0].openai_request_timezone_enabled).toBe(!enabled);
+  });
+
   it("submits the Codex ticket harvest toggle", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,

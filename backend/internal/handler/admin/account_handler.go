@@ -3533,3 +3533,8 @@ func sanitizeExtraBaseRPM(extra map[string]any) {
 	}
 	extra["base_rpm"] = v
 }
+
+// GetOpenAIRequestTimezones returns the supported account request timezone catalog.
+func (h *AccountHandler) GetOpenAIRequestTimezones(c *gin.Context) {
+	response.Success(c, gin.H{"default": service.DefaultOpenAIRequestTimezone, "timezones": service.OpenAIRequestTimezoneOptions()})
+}

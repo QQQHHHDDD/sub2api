@@ -629,6 +629,8 @@ export default {
         claudeCodeVersionAutoSyncHint: 'Fetches the latest Claude Code client version from the official release channel every hour, so you never need to upgrade this service just to keep the version current. When disabled, fetching stops but the previously synced version remains available. The manual version above always takes priority.',
         claudeCodeVersionSyncedValue: 'Currently synced: {version}',
         codexHardeningTitle: "Codex Settings",
+        requestTimezoneEnabled: 'Bind request timezone',
+        requestTimezoneEnabledDesc: 'Use each OpenAI account’s timezone (Asia/Singapore by default) for existing environment context and web search timezone fields. Dates and ordinary text remain unchanged. Disabled means no timezone rewriting. This does not guarantee improved model quality.',
         codexTicketEnabled: "780 ticket harvest",
         codexTicketEnabledDesc:
           "When off, the gateway neither harvests nor injects x-codex-turn-state and forwards traffic as usual. When on, it harvests tickets in the background and overwrites that header on production requests.",
