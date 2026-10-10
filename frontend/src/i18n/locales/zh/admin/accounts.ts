@@ -832,6 +832,10 @@ export default {
       },
       // OpenAI specific hints
       openai: {
+        requestTimezone: '请求时区',
+        requestTimezoneDesc: '仅在系统设置中开启“请求时区绑定”后生效，未配置时使用 Asia/Singapore。',
+        requestTimezoneLoadFailed: '加载时区列表失败，请稍后重试。',
+
         baseUrlHint: '留空使用官方 OpenAI API',
         prismBrowser: '自动使用 Prism 浏览器协议',
         prismBrowserDesc: '使用此 OpenAI OAuth 账号接入服务器管理的 Prism 适配器，无需另填 Prism 凭据。支持以下四个模型的文本请求，以及 6.1 Sol 的客户端函数和自定义工具。',
